@@ -20,7 +20,7 @@ use strict;
 # ----------------- package info  ------------------
 
 # irssi package info
-my $VERSION = "0.1.0";
+my $VERSION = "0.1.1";
 my %IRSSI = (
   authors => 'John "Gothi[c]" Sennesael',
   contact => 'john@adminking.com',
@@ -410,6 +410,8 @@ sub encrypt
     $encrypted_message = $prefixes[0] . $blowfish->encrypt($message);  
   }
 
+
+
   # output line
   if ($event_type eq 'send_command')
   {
@@ -418,11 +420,29 @@ sub encrypt
   }
   else
   {
-    $server->print($channel, "<$own_nick|{$method}> \00311$message",MSGLEVEL_CLIENTCRAP); 
+    my $chanopstr = getopstr($server, $channel, $own_nick);
+    $server->print($channel, "\00303<\00315$chanopstr\00315\002$own_nick\002\00303>\00315 $message",MSGLEVEL_CLIENTCRAP); 
     $server->command("\^msg -$server->{tag} $channel $encrypted_message");
   }
   Irssi::signal_stop();
   return 1;
+}
+
+sub getopstr
+{
+  my ($server, $channel, $nick) = @_;
+
+  foreach my $chan ($server->channels()) {
+    if ($chan->{name} eq $channel) {
+      foreach my $channick ($chan->nicks()) {
+        if ($channick->{nick} eq $nick and $channick->{op}) {
+          return "@";
+        }
+      }
+    }
+  }
+
+  return " ";
 }
 
 # decrypt text
@@ -467,6 +487,9 @@ sub decrypt
   # Get channel.
   my $channel = @params[5];
   
+  # Get the user's nickname (own nickname).
+  my $own_nick = $server->{nick};
+
   # local declarations
   my $result = '';
   my $key = $channels{$channel};
@@ -541,11 +564,16 @@ sub decrypt
   { 
     if ($event_type eq 'message_action')
     {
-      $server->print($channel, " ** $nick($method) \00311$result", MSGLEVEL_CLIENTCRAP);   
+      $server->print($channel, " ** $nick $result", MSGLEVEL_CLIENTCRAP);   
     }
     else
     {
-      $server->print($channel, "<$nick|{$method}> \00311$result", MSGLEVEL_CLIENTCRAP);
+      my $chanopstr = getopstr($server, $channel, $nick);
+      if ($result =~ /$own_nick/) {
+        $server->print($channel, "\00303<\00315$chanopstr\00308$nick\00303>\00315 $result", MSGLEVEL_CLIENTCRAP+MSGLEVEL_HILIGHT);
+      } else {
+        $server->print($channel, "\00303<\00315$chanopstr$nick\00303>\00315 $result", MSGLEVEL_CLIENTCRAP+MSGLEVEL_PUBLIC);
+      }
     }
   }
   else
